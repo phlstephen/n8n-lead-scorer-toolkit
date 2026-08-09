@@ -1,0 +1,1 @@
+place_id,name,website,rating,review_count,phone,address,lead_type,technical_score,pagespeed_score,lcp,cls,ai_crawlers_blocked,crawler_access_ok,has_schema_markup,has_llms_txt,design_score,copy_score,verdict,pitch,batch_size,batch_llms_txt_count,batch_crawler_blocked_count,batch_avg_pagespeed,google_listing_matched,name_source
