@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lead Scorer — Control Panel</title>
+<style>
+  :root{
+    --bg:#12161b;
+    --panel:#181d24;
+    --panel-2:#1e242c;
+    --line:#2a323c;
+    --text:#e6e3da;
+    --muted:#7c8794;
+    --amber:#e2a23b;
+    --amber-dim:#8a6a2f;
+    --green:#5fbf87;
+    --red:#e2735b;
+    --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(ellipse at top left, rgba(226,162,59,0.06), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    display:flex;
+    justify-content:center;
+    padding:48px 20px;
+  }
+  .wrap{ width:100%; max-width:640px; }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--amber);
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:10px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:7px;height:7px;border-radius:50%;
+    background:var(--amber);
+    box-shadow:0 0 8px var(--amber);
+    animation:pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  h1{
+    font-size:26px;
+    font-weight:600;
+    margin:0 0 6px;
+    letter-spacing:-0.01em;
+  }
+  .sub{ color:var(--muted); font-size:14px; margin:0 0 32px; line-height:1.5; }
+
+  .config{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px 18px;
+    margin-bottom:24px;
+  }
+  .config label{
+    display:block;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    margin-bottom:6px;
+  }
+  .config input{ width:100%; }
+  .config .hint{ font-size:12px; color:var(--muted); margin-top:8px; line-height:1.5; }
+  .config .hint code{ color:var(--amber); }
+
+  .tabs{
+    display:flex;
+    gap:2px;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:10px 10px 0 0;
+    padding:4px;
+    border-bottom:none;
+  }
+  .tab{
+    flex:1;
+    text-align:center;
+    padding:10px 12px;
+    border-radius:7px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    letter-spacing:0.03em;
+    color:var(--muted);
+    cursor:pointer;
+    transition:background 0.15s, color 0.15s;
+    user-select:none;
+  }
+  .tab.active{ background:var(--panel); color:var(--amber); }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:0 0 10px 10px;
+    padding:24px;
+  }
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  label.field{
+    display:block;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    margin:16px 0 6px;
+  }
+  label.field:first-child{ margin-top:0; }
+  .req::after{ content:" *"; color:var(--amber); }
+
+  input[type=text], input[type=number], select{
+    width:100%;
+    background:var(--bg);
+    border:1px solid var(--line);
+    border-radius:7px;
+    padding:10px 12px;
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:14px;
+    outline:none;
+    transition:border-color 0.15s;
+  }
+  input:focus, select:focus{ border-color:var(--amber-dim); }
+  input::placeholder{ color:#4a525c; }
+
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+
+  button.go{
+    flex:1;
+    background:var(--amber);
+    color:#1a1406;
+    border:none;
+    border-radius:7px;
+    padding:13px;
+    font-family:var(--mono);
+    font-size:13px;
+    font-weight:600;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    cursor:pointer;
+    transition:filter 0.15s, transform 0.1s;
+  }
+  button.go:hover{ filter:brightness(1.08); }
+  button.go:active{ transform:scale(0.99); }
+  button.go:disabled{ opacity:0.5; cursor:default; }
+
+  .btn-row{ display:flex; gap:10px; margin-top:24px; }
+
+  button.clear{
+    background:transparent;
+    color:var(--muted);
+    border:1px solid var(--line);
+    border-radius:7px;
+    padding:13px 18px;
+    font-family:var(--mono);
+    font-size:13px;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    cursor:pointer;
+    transition:border-color 0.15s, color 0.15s;
+  }
+  button.clear:hover{ border-color:var(--muted); color:var(--text); }
+
+  .log{
+    margin-top:28px;
+    background:#0d1013;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:14px 16px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    line-height:1.7;
+    max-height:220px;
+    overflow-y:auto;
+  }
+  .log .empty{ color:#454d57; }
+  .log-line{ display:flex; gap:10px; }
+  .log-line .t{ color:#454d57; flex-shrink:0; }
+  .log-line.ok .m{ color:var(--green); }
+  .log-line.err .m{ color:var(--red); }
+  .log-line.info .m{ color:var(--muted); }
+
+  .cursor{
+    display:inline-block; width:7px; height:13px;
+    background:var(--amber); margin-left:2px;
+    animation:blink 1s step-end infinite;
+    vertical-align:-2px;
+  }
+  @keyframes blink{ 50%{ opacity:0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">local control panel</div>
+  <h1>Lead Scorer</h1>
+  <p class="sub">Fires your n8n webhooks directly. Nothing here talks to anyone but your own server — results land in your Google Sheet, not on this page.</p>
+
+  <div class="config">
+    <label for="baseUrl">n8n base URL</label>
+    <input type="text" id="baseUrl" placeholder="http://192.168.1.50:5678">
+    <div class="hint">Where your n8n instance is reachable from this browser — no trailing slash. Saved locally in this browser only. Example: <code>http://192.168.1.50:5678</code></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-view="search">Search Leads</div>
+    <div class="tab" data-view="grade">Grade a Website</div>
+  </div>
+
+  <div class="panel">
+    <!-- SEARCH VIEW -->
+    <div class="view active" id="view-search">
+      <label class="field req">Business category</label>
+      <input type="text" id="s-category" placeholder="roofing contractor">
+
+      <div class="row2">
+        <div>
+          <label class="field req">City</label>
+          <input type="text" id="s-city" placeholder="Austin">
+        </div>
+        <div>
+          <label class="field req">State</label>
+          <input type="text" id="s-state" placeholder="Texas">
+        </div>
+      </div>
+
+      <label class="field">Minimum reviews</label>
+      <input type="number" id="s-minreviews" placeholder="15">
+
+      <div class="btn-row">
+        <button class="go" id="btn-search">Start search</button>
+        <button class="clear" id="clear-search">Clear</button>
+      </div>
+    </div>
+
+    <!-- GRADE VIEW -->
+    <div class="view" id="view-grade">
+      <label class="field req">Website URL</label>
+      <input type="text" id="g-website" placeholder="https://example.com">
+
+      <label class="field">Business name</label>
+      <input type="text" id="g-name" placeholder="leave blank to auto-detect">
+
+      <div class="row2">
+        <div>
+          <label class="field">City</label>
+          <input type="text" id="g-city" placeholder="improves match accuracy">
+        </div>
+        <div>
+          <label class="field">State</label>
+          <input type="text" id="g-state" placeholder="optional">
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="go" id="btn-grade">Grade website</button>
+        <button class="clear" id="clear-grade">Clear</button>
+      </div>
+    </div>
+
+    <div class="log" id="log">
+      <span class="empty">waiting for a request<span class="cursor"></span></span>
+    </div>
+  </div>
+</div>
+
+<script>
+const baseUrlInput = document.getElementById('baseUrl');
+const DEFAULT_BASE_URL = ''; // set this to YOUR n8n instance's address
+baseUrlInput.value = localStorage.getItem('leadScorerBaseUrl') || DEFAULT_BASE_URL;
+baseUrlInput.addEventListener('change', () => {
+  localStorage.setItem('leadScorerBaseUrl', baseUrlInput.value.trim());
+});
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-' + tab.dataset.view).classList.add('active');
+  });
+});
+
+const logEl = document.getElementById('log');
+function log(message, kind){
+  if (logEl.querySelector('.empty')) logEl.innerHTML = '';
+  const line = document.createElement('div');
+  line.className = 'log-line ' + kind;
+  const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  line.innerHTML = '<span class="t">' + time + '</span><span class="m"></span>';
+  line.querySelector('.m').textContent = message;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function fireWebhook(path, payload, button){
+  const base = baseUrlInput.value.trim();
+  if (!base) { log('Set your n8n base URL above first.', 'err'); return; }
+  button.disabled = true;
+  const originalText = button.textContent;
+  button.textContent = 'Working…';
+  try {
+    const res = await fetch(base.replace(/\/$/, '') + '/webhook/' + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const raw = await res.text();
+    let data = null;
+    try { data = JSON.parse(raw); } catch (e) { /* not JSON, handled below */ }
+
+    if (res.ok && data && data.success) {
+      if (data.count === 1 && data.leads && data.leads[0]) {
+        const l = data.leads[0];
+        log('Done — ' + (l.name || l.website) + ': verdict "' + (l.verdict || 'n/a') + '", technical score ' + (l.technical_score ?? 'n/a') + '.', 'ok');
+      } else {
+        log('Done — ' + data.count + ' lead(s) written to the sheet.', 'ok');
+      }
+    } else if (res.ok) {
+      log('Workflow finished but returned an unexpected response: ' + raw.slice(0, 200), 'err');
+    } else {
+      log('n8n reported a failure (HTTP ' + res.status + '): ' + raw.slice(0, 200), 'err');
+    }
+  } catch (err) {
+    log('Could not reach n8n at that URL, or the connection dropped before the workflow finished. Check the base URL and that n8n is running.', 'err');
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+document.getElementById('clear-search').addEventListener('click', () => {
+  ['s-category','s-city','s-state','s-minreviews'].forEach(id => document.getElementById(id).value = '');
+});
+document.getElementById('clear-grade').addEventListener('click', () => {
+  ['g-website','g-name','g-city','g-state'].forEach(id => document.getElementById(id).value = '');
+});
+
+document.getElementById('btn-search').addEventListener('click', () => {
+  const category = document.getElementById('s-category').value.trim();
+  const city = document.getElementById('s-city').value.trim();
+  const state = document.getElementById('s-state').value.trim();
+  const min_reviews = document.getElementById('s-minreviews').value.trim();
+  if (!category || !city || !state) { log('Category, city, and state are required.', 'err'); return; }
+  const location = city + ', ' + state;
+  log('Searching "' + category + '" in ' + location + '… this waits for the full run, so it can take a couple of minutes for a full batch.', 'info');
+  fireWebhook('new-lead-search', { category, location, min_reviews }, document.getElementById('btn-search'));
+});
+
+document.getElementById('btn-grade').addEventListener('click', () => {
+  const website = document.getElementById('g-website').value.trim();
+  const name_override = document.getElementById('g-name').value.trim();
+  const city = document.getElementById('g-city').value.trim();
+  const state = document.getElementById('g-state').value.trim();
+  if (!website) { log('Website URL is required.', 'err'); return; }
+  log('Grading ' + website + '… usually takes 10\u201320 seconds.', 'info');
+  fireWebhook('grade-website', { website, name_override, city, state }, document.getElementById('btn-grade'));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,1395 @@
+{
+  "name": "Local Biz Lead Scorer - No Website + Site Quality",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "new-lead-search",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "form-trigger",
+      "name": "Webhook: New Lead Search",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2000,
+        300
+      ],
+      "webhookId": "new-lead-search-webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "category",
+              "type": "string",
+              "value": "={{ $json.body.category }}"
+            },
+            {
+              "id": "a2",
+              "name": "location",
+              "type": "string",
+              "value": "={{ $json.body.location }}"
+            },
+            {
+              "id": "a3",
+              "name": "min_reviews",
+              "type": "number",
+              "value": "={{ $json.body.min_reviews ? Number($json.body.min_reviews) : 15 }}"
+            }
+          ]
+        }
+      },
+      "id": "set-params",
+      "name": "1. Set Search Params",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.id,places.websiteUri,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.formattedAddress"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ textQuery: $json.category + \" in \" + $json.location, maxResultCount: 20 }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "google-places-header-auth",
+          "name": "Google Places API Key (header: X-Goog-Api-Key)"
+        }
+      },
+      "id": "search-places",
+      "name": "2. Search Places (Text Search)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split the places[] array from the Text Search response into individual n8n items\nconst places = $input.first().json.places || [];\nreturn places.map(p => ({\n  json: {\n    place_id: p.id,\n    name: p.displayName ? p.displayName.text : '',\n    website: p.websiteUri || null,\n    rating: p.rating || null,\n    review_count: p.userRatingCount || 0,\n    phone: p.nationalPhoneNumber || null,\n    address: p.formattedAddress || null\n  }\n}));"
+      },
+      "id": "split-results",
+      "name": "3. Split Into Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-reviews",
+              "leftValue": "={{ $json.review_count }}",
+              "rightValue": "={{ $('1. Set Search Params').first().json.min_reviews }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-reviews",
+      "name": "4. Filter: Enough Reviews?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond-website",
+              "leftValue": "={{ $json.website }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "has-website",
+      "name": "5. Has Website?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "n1",
+              "name": "lead_type",
+              "type": "string",
+              "value": "no_website"
+            },
+            {
+              "id": "n2",
+              "name": "technical_score",
+              "type": "number",
+              "value": 0
+            },
+            {
+              "id": "n3",
+              "name": "design_score",
+              "type": "number",
+              "value": null
+            },
+            {
+              "id": "n4",
+              "name": "copy_score",
+              "type": "number",
+              "value": null
+            },
+            {
+              "id": "n5",
+              "name": "verdict",
+              "type": "string",
+              "value": "no_website"
+            },
+            {
+              "id": "n6",
+              "name": "pitch",
+              "type": "string",
+              "value": "No website found on the Google Maps listing \u2014 fully open opportunity."
+            }
+          ]
+        }
+      },
+      "id": "format-no-website",
+      "name": "6a. Tag No-Website Lead",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -680,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.website }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            }
+          ]
+        }
+      },
+      "id": "fetch-html",
+      "name": "6b. Fetch Homepage HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -680,
+        180
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('5. Has Website?').item.json;\nconst html = (typeof $json.data === 'string') ? $json.data : '';\nconst textOnly = html.replace(/<script[\\s\\S]*?<\\/script>/gi, ' ').replace(/<style[\\s\\S]*?<\\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n\nlet schemaTypes = [];\nconst ldMatches = [...html.matchAll(/<script[^>]+type=[\"']application\\/ld\\+json[\"'][^>]*>([\\s\\S]*?)<\\/script>/gi)];\nfor (const m of ldMatches) {\n  try {\n    const parsed = JSON.parse(m[1].trim());\n    const items = Array.isArray(parsed) ? parsed : [parsed];\n    for (const it of items) { if (it['@type']) schemaTypes.push(it['@type']); }\n  } catch (e) { /* malformed JSON-LD, skip */ }\n}\n\nreturn [{\n  json: {\n    ...original,\n    page_text: textOnly.slice(0, 6000),\n    text_length: textOnly.length,\n    fetch_failed: !html,\n    has_schema_markup: schemaTypes.length > 0,\n    schema_types: schemaTypes\n  }\n}];"
+      },
+      "id": "parse-html",
+      "name": "7. Parse HTML + Detect Schema",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $json.website }}"
+            },
+            {
+              "name": "strategy",
+              "value": "mobile"
+            },
+            {
+              "name": "category",
+              "value": "performance"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "google-pagespeed-query-auth",
+          "name": "Google PageSpeed API Key (query param: key)"
+        }
+      },
+      "id": "pagespeed",
+      "name": "8. PageSpeed Insights (Mobile)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        180
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('7. Parse HTML + Detect Schema').item.json;\nconst ps = $json;\nconst perfScore = ps && ps.lighthouseResult && ps.lighthouseResult.categories && ps.lighthouseResult.categories.performance\n  ? Math.round(ps.lighthouseResult.categories.performance.score * 100)\n  : null;\nconst audits = (ps && ps.lighthouseResult && ps.lighthouseResult.audits) || {};\nconst lcp = audits['largest-contentful-paint'] ? audits['largest-contentful-paint'].displayValue : null;\nconst cls = audits['cumulative-layout-shift'] ? audits['cumulative-layout-shift'].displayValue : null;\n\nreturn [{\n  json: {\n    ...original,\n    pagespeed_score: perfScore,\n    lcp,\n    cls\n  }\n}];"
+      },
+      "id": "recombine-pagespeed",
+      "name": "9. Recombine: PageSpeed Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.website }}/robots.txt",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            }
+          ]
+        }
+      },
+      "id": "fetch-robots",
+      "name": "10. Fetch robots.txt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        180
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('9. Recombine: PageSpeed Result').item.json;\nconst robotsTxt = (typeof $json.data === 'string') ? $json.data : '';\nconst aiBots = ['GPTBot', 'ClaudeBot', 'PerplexityBot', 'OAI-SearchBot', 'Google-Extended', 'Applebot'];\nlet blockedBots = [];\nif (robotsTxt) {\n  const lines = robotsTxt.split('\\n');\n  let currentAgent = null;\n  for (const raw of lines) {\n    const line = raw.trim();\n    const uaMatch = line.match(/^User-agent:\\s*(.+)$/i);\n    if (uaMatch) currentAgent = uaMatch[1].trim();\n    const disallowMatch = line.match(/^Disallow:\\s*\\/?\\s*$/i);\n    if (disallowMatch && currentAgent && aiBots.some(b => b.toLowerCase() === currentAgent.toLowerCase())) {\n      blockedBots.push(currentAgent);\n    }\n  }\n}\nreturn [{\n  json: {\n    ...original,\n    ai_crawlers_blocked: blockedBots,\n    crawler_access_ok: blockedBots.length === 0\n  }\n}];"
+      },
+      "id": "recombine-robots",
+      "name": "11. Recombine: robots.txt Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.website }}/llms.txt",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            }
+          ]
+        }
+      },
+      "id": "fetch-llmstxt",
+      "name": "12. Fetch llms.txt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        180
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('11. Recombine: robots.txt Result').item.json;\nconst hasLlmsTxt = typeof $json.data === 'string' && $json.data.length > 0 && !$json.error;\n\nconst pageSpeedComponent = (original.pagespeed_score !== null && original.pagespeed_score !== undefined ? original.pagespeed_score : 30) * 0.5;\nconst crawlerComponent = (original.crawler_access_ok ? 100 : 0) * 0.2;\nconst schemaComponent = (original.has_schema_markup ? 100 : 0) * 0.2;\nconst llmsTxtComponent = (hasLlmsTxt ? 100 : 0) * 0.1;\nconst technical_score = Math.round(pageSpeedComponent + crawlerComponent + schemaComponent + llmsTxtComponent);\n\nreturn [{\n  json: {\n    ...original,\n    has_llms_txt: hasLlmsTxt,\n    technical_score\n  }\n}];"
+      },
+      "id": "compute-score",
+      "name": "13. Compute Technical Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"claude-haiku-4-5-20251001\",\n  max_tokens: 500,\n  messages: [{\n    role: \"user\",\n    content: \"You are grading a small local business website for a cold-outreach web design pitch. Here is the visible homepage text (truncated):\\n\\n\" + ($json.page_text || \"[could not fetch page content]\") + \"\\n\\nTechnical facts already measured: PageSpeed mobile performance score = \" + $json.pagespeed_score + \"/100, has schema.org structured data = \" + $json.has_schema_markup + \", AI crawlers blocked in robots.txt = \" + JSON.stringify($json.ai_crawlers_blocked) + \", has llms.txt = \" + $json.has_llms_txt + \".\\n\\nReal competitor context from this same search batch (\" + $json.batch_size + \" other local businesses in the same category/location search): \" + $json.batch_llms_txt_count + \" of them have an llms.txt file, and their average mobile PageSpeed score is \" + $json.batch_avg_pagespeed + \"/100.\\n\\nTONE FOR THE PITCH: write it the way a friendly local business owner would talk to another business owner they respect \u2014 warm, genuine, a little conversational, never clinical or lecture-y. Avoid words like \\\"keyword-stuffed,\\\" \\\"excessive,\\\" \\\"hurt,\\\" \\\"costing you,\\\" or anything that sounds like an audit finding. Instead of pointing out what's wrong, frame it as an opportunity you noticed and want to help with. Use the business's own name naturally if you have it. Structure: one genuine, specific observation (can be neutral or even a small compliment) about their site, then one concrete opportunity grounded in a real number or fact, then a low-pressure, curious invitation to chat \u2014 not a hard sell. Think \\\"hey, I noticed X, and I bet fixing Y could really help \u2014 happy to show you what I mean if you're curious\\\" in spirit, not those exact words. 1-2 short sentences total, sound like an actual person wrote it, not a template.\\n\\nSTRICT RULE: only mention competitors or comparative claims (e.g. \\\"X of the Y businesses we checked...\\\") if the batch numbers above actually support it \u2014 e.g. only claim llms.txt adoption among competitors if batch_llms_txt_count is greater than 0. Never assert that competitors are doing something without a real number from the batch context to back it up. If the batch context doesn't support a competitive claim, write the pitch using only this business's own numbers instead.\\n\\nRespond with ONLY valid JSON, no markdown fences, in this exact shape: {\\\"design_score\\\": <1-10 integer>, \\\"copy_score\\\": <1-10 integer>, \\\"verdict\\\": \\\"<one of: terrible, needs_work, decent, good>\\\", \\\"pitch\\\": \\\"<one sentence, specific, usable as a cold email opener, referencing at least one concrete technical or design issue, and a real competitor stat ONLY if the strict rule above allows it>\\\"}\"\n  }]\n}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ai-score",
+      "name": "14. AI Score Site (Claude Haiku)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        180
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "anthropic-header-auth",
+          "name": "Anthropic Claude API Key (header: x-api-key)"
+        }
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('13b. Compute Real Competitor Stats').item.json;\nlet parsed = { design_score: null, copy_score: null, verdict: 'unknown', pitch: '' };\ntry {\n  const text = $json.content && $json.content[0] && $json.content[0].text ? $json.content[0].text : '{}';\n  const cleaned = text.replace(/```json|```/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) { /* Claude didn't return clean JSON, keep defaults */ }\n\nreturn [{\n  json: {\n    place_id: original.place_id,\n    name: original.name,\n    website: original.website,\n    rating: original.rating,\n    review_count: original.review_count,\n    phone: original.phone,\n    address: original.address,\n    lead_type: 'has_website',\n    technical_score: original.technical_score,\n    pagespeed_score: original.pagespeed_score,\n    lcp: original.lcp,\n    cls: original.cls,\n    ai_crawlers_blocked: original.ai_crawlers_blocked,\n    crawler_access_ok: original.crawler_access_ok,\n    has_schema_markup: original.has_schema_markup,\n    has_llms_txt: original.has_llms_txt,\n    design_score: parsed.design_score,\n    copy_score: parsed.copy_score,\n    verdict: parsed.verdict,\n    pitch: parsed.pitch,\n    batch_size: original.batch_size,\n    batch_llms_txt_count: original.batch_llms_txt_count,\n    batch_crawler_blocked_count: original.batch_crawler_blocked_count,\n    batch_avg_pagespeed: original.batch_avg_pagespeed\n  }\n}];"
+      },
+      "id": "parse-ai-response",
+      "name": "15. Parse AI JSON Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append"
+      },
+      "id": "merge-leads",
+      "name": "16. Merge All Leads",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -460,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "mode": "id",
+          "value": "1LR74i2ijA7Kg0b-vOLERMJmbtSnbJGSQm4irpVF_p98"
+        },
+        "sheetName": {
+          "mode": "name",
+          "value": "Leads"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "write-sheet",
+      "name": "17. Append to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1520,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "grade-website",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "form-trigger-2",
+      "name": "Webhook: Grade Website",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2000,
+        900
+      ],
+      "webhookId": "grade-website-webhook"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "w1",
+              "name": "website",
+              "type": "string",
+              "value": "={{ $json.body.website }}"
+            },
+            {
+              "id": "w2",
+              "name": "name_override",
+              "type": "string",
+              "value": "={{ $json.body.name_override || '' }}"
+            },
+            {
+              "id": "w3",
+              "name": "city",
+              "type": "string",
+              "value": "={{ $json.body.city || '' }}"
+            },
+            {
+              "id": "w4",
+              "name": "state",
+              "type": "string",
+              "value": "={{ $json.body.state || '' }}"
+            }
+          ]
+        }
+      },
+      "id": "b0-website-input",
+      "name": "B0. Website Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1900,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let url = ($json.website || '').trim();\nif (url && !/^https?:\\/\\//i.test(url)) { url = 'https://' + url; }\nreturn [{\n  json: {\n    website: url,\n    name_override: ($json.name_override || '').trim(),\n    city: ($json.city || '').trim(),\n    state: ($json.state || '').trim()\n  }\n}];"
+      },
+      "id": "b1-normalize-url",
+      "name": "B1. Normalize URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1780,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.website }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            }
+          ]
+        }
+      },
+      "id": "b2-fetch-html",
+      "name": "B2. Fetch Homepage HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1560,
+        900
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('B1. Normalize URL').item.json;\nconst html = (typeof $json.data === 'string') ? $json.data : '';\nconst textOnly = html.replace(/<script[\\s\\S]*?<\\/script>/gi, ' ').replace(/<style[\\s\\S]*?<\\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();\n\n// Detect JSON-LD and pull an Organization/LocalBusiness name if present\nlet schemaTypes = [];\nlet schemaName = null;\nconst ldMatches = [...html.matchAll(/<script[^>]+type=[\"']application\\/ld\\+json[\"'][^>]*>([\\s\\S]*?)<\\/script>/gi)];\nfor (const m of ldMatches) {\n  try {\n    const parsed = JSON.parse(m[1].trim());\n    const items = Array.isArray(parsed) ? parsed : [parsed];\n    for (const it of items) {\n      if (it['@type']) schemaTypes.push(it['@type']);\n      const t = Array.isArray(it['@type']) ? it['@type'] : [it['@type']];\n      if (!schemaName && it.name && t.some(x => /organization|localbusiness/i.test(String(x)))) {\n        schemaName = it.name;\n      }\n    }\n  } catch (e) { /* malformed JSON-LD, skip */ }\n}\n\n// og:site_name meta tag\nconst ogMatch = html.match(/<meta[^>]+property=[\"']og:site_name[\"'][^>]+content=[\"']([^\"']+)[\"']/i);\nconst ogName = ogMatch ? ogMatch[1].trim() : null;\n\n// <title> tag, trimmed at common separators\nconst titleMatch = html.match(/<title[^>]*>([^<]+)<\\/title>/i);\nlet titleName = null;\nif (titleMatch) {\n  titleName = titleMatch[1].split(/[|\\u2013\\u2014-]/)[0].trim();\n}\n\n// Domain fallback\nlet domainName = null;\ntry {\n  const host = new URL(original.website).hostname.replace(/^www\\./, '');\n  domainName = host.split('.')[0].replace(/[-_]/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase());\n} catch (e) { /* invalid URL, ignore */ }\n\nconst inferred_name = original.name_override || schemaName || ogName || titleName || domainName || '';\n\nreturn [{\n  json: {\n    ...original,\n    inferred_name,\n    name_source: original.name_override ? 'user_override' : (schemaName ? 'schema_org' : (ogName ? 'og_site_name' : (titleName ? 'title_tag' : 'domain_fallback'))),\n    page_text: textOnly.slice(0, 6000),\n    text_length: textOnly.length,\n    fetch_failed: !html,\n    has_schema_markup: schemaTypes.length > 0,\n    schema_types: schemaTypes\n  }\n}];"
+      },
+      "id": "b3-parse-infer",
+      "name": "B3. Parse HTML + Infer Name",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1340,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://places.googleapis.com/v1/places:searchText",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-FieldMask",
+              "value": "places.displayName,places.id,places.websiteUri,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.formattedAddress"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ textQuery: $json.inferred_name + ($json.city ? (', ' + $json.city) : '') + ($json.state ? (', ' + $json.state) : ''), maxResultCount: 3 }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "b4-find-place",
+      "name": "B4. Find Matching Google Listing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1120,
+        900
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "google-places-header-auth",
+          "name": "Google Places API Key (header: X-Goog-Api-Key)"
+        }
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('B3. Parse HTML + Infer Name').item.json;\nconst results = $json.places || [];\n\n// Prefer a result whose website hostname matches the input website's hostname; otherwise take the first result\nlet match = null;\ntry {\n  const inputHost = new URL(original.website).hostname.replace(/^www\\./, '');\n  match = results.find(p => {\n    try { return p.websiteUri && new URL(p.websiteUri).hostname.replace(/^www\\./, '') === inputHost; } catch (e) { return false; }\n  }) || results[0] || null;\n} catch (e) {\n  match = results[0] || null;\n}\n\nreturn [{\n  json: {\n    ...original,\n    place_id: match ? match.id : null,\n    matched_name: match && match.displayName ? match.displayName.text : null,\n    rating: match ? (match.rating || null) : null,\n    review_count: match ? (match.userRatingCount || 0) : null,\n    phone: match ? (match.nationalPhoneNumber || null) : null,\n    address: match ? (match.formattedAddress || null) : null,\n    google_listing_matched: !!match\n  }\n}];"
+      },
+      "id": "b5-extract-match",
+      "name": "B5. Extract Place Match",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -900,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $json.website }}"
+            },
+            {
+              "name": "strategy",
+              "value": "mobile"
+            },
+            {
+              "name": "category",
+              "value": "performance"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "b6-pagespeed",
+      "name": "B6. PageSpeed Insights (Mobile)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -680,
+        900
+      ],
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "google-pagespeed-query-auth",
+          "name": "Google PageSpeed API Key (query param: key)"
+        }
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('B5. Extract Place Match').item.json;\nconst ps = $json;\nconst perfScore = ps && ps.lighthouseResult && ps.lighthouseResult.categories && ps.lighthouseResult.categories.performance\n  ? Math.round(ps.lighthouseResult.categories.performance.score * 100)\n  : null;\nconst audits = (ps && ps.lighthouseResult && ps.lighthouseResult.audits) || {};\nconst lcp = audits['largest-contentful-paint'] ? audits['largest-contentful-paint'].displayValue : null;\nconst cls = audits['cumulative-layout-shift'] ? audits['cumulative-layout-shift'].displayValue : null;\n\nreturn [{\n  json: {\n    ...original,\n    pagespeed_score: perfScore,\n    lcp,\n    cls\n  }\n}];"
+      },
+      "id": "b7-recombine-pagespeed",
+      "name": "B7. Recombine: PageSpeed Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.website }}/robots.txt",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            }
+          ]
+        }
+      },
+      "id": "b8-fetch-robots",
+      "name": "B8. Fetch robots.txt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -240,
+        900
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('B7. Recombine: PageSpeed Result').item.json;\nconst robotsTxt = (typeof $json.data === 'string') ? $json.data : '';\nconst aiBots = ['GPTBot', 'ClaudeBot', 'PerplexityBot', 'OAI-SearchBot', 'Google-Extended', 'Applebot'];\nlet blockedBots = [];\nif (robotsTxt) {\n  const lines = robotsTxt.split('\\n');\n  let currentAgent = null;\n  for (const raw of lines) {\n    const line = raw.trim();\n    const uaMatch = line.match(/^User-agent:\\s*(.+)$/i);\n    if (uaMatch) currentAgent = uaMatch[1].trim();\n    const disallowMatch = line.match(/^Disallow:\\s*\\/?\\s*$/i);\n    if (disallowMatch && currentAgent && aiBots.some(b => b.toLowerCase() === currentAgent.toLowerCase())) {\n      blockedBots.push(currentAgent);\n    }\n  }\n}\nreturn [{\n  json: {\n    ...original,\n    ai_crawlers_blocked: blockedBots,\n    crawler_access_ok: blockedBots.length === 0\n  }\n}];"
+      },
+      "id": "b9-recombine-robots",
+      "name": "B9. Recombine: robots.txt Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.website }}/llms.txt",
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "en-US,en;q=0.9"
+            }
+          ]
+        }
+      },
+      "id": "b10-fetch-llmstxt",
+      "name": "B10. Fetch llms.txt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        900
+      ],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('B9. Recombine: robots.txt Result').item.json;\nconst hasLlmsTxt = typeof $json.data === 'string' && $json.data.length > 0 && !$json.error;\n\nconst pageSpeedComponent = (original.pagespeed_score !== null && original.pagespeed_score !== undefined ? original.pagespeed_score : 30) * 0.5;\nconst crawlerComponent = (original.crawler_access_ok ? 100 : 0) * 0.2;\nconst schemaComponent = (original.has_schema_markup ? 100 : 0) * 0.2;\nconst llmsTxtComponent = (hasLlmsTxt ? 100 : 0) * 0.1;\nconst technical_score = Math.round(pageSpeedComponent + crawlerComponent + schemaComponent + llmsTxtComponent);\n\nreturn [{\n  json: {\n    ...original,\n    has_llms_txt: hasLlmsTxt,\n    technical_score\n  }\n}];"
+      },
+      "id": "b11-compute-score",
+      "name": "B11. Compute Technical Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"claude-haiku-4-5-20251001\",\n  max_tokens: 500,\n  messages: [{\n    role: \"user\",\n    content: \"You are grading a small local business website for a cold-outreach web design pitch. Here is the visible homepage text (truncated):\\n\\n\" + ($json.page_text || \"[could not fetch page content]\") + \"\\n\\nTechnical facts already measured: PageSpeed mobile performance score = \" + $json.pagespeed_score + \"/100, has schema.org structured data = \" + $json.has_schema_markup + \", AI crawlers blocked in robots.txt = \" + JSON.stringify($json.ai_crawlers_blocked) + \", has llms.txt = \" + $json.has_llms_txt + \".\"\\n\\nTONE FOR THE PITCH: write it the way a friendly local business owner would talk to another business owner they respect \u2014 warm, genuine, a little conversational, never clinical or lecture-y. Avoid words like \\\"keyword-stuffed,\\\" \\\"excessive,\\\" \\\"hurt,\\\" \\\"costing you,\\\" or anything that sounds like an audit finding. Instead of pointing out what's wrong, frame it as an opportunity you noticed and want to help with. Use the business's own name naturally if you have it. Structure: one genuine, specific observation (can be neutral or even a small compliment) about their site, then one concrete opportunity grounded in a real number or fact, then a low-pressure, curious invitation to chat \u2014 not a hard sell. Think \\\"hey, I noticed X, and I bet fixing Y could really help \u2014 happy to show you what I mean if you're curious\\\" in spirit, not those exact words. 1-2 short sentences total, sound like an actual person wrote it, not a template.\\n\\nSTRICT RULE: this is a single business graded in isolation \u2014 you have NO data on any competitor, so never mention competitors, industry trends, or what \\\"others are doing\\\" in the pitch. Base the pitch only on this business's own scraped content and its own technical numbers above.\\n\\nRespond with ONLY valid JSON, no markdown fences, in this exact shape: {\\\"design_score\\\": <1-10 integer>, \\\"copy_score\\\": <1-10 integer>, \\\"verdict\\\": \\\"<one of: terrible, needs_work, decent, good>\\\", \\\"pitch\\\": \\\"<one sentence, specific, usable as a cold email opener, referencing at least one concrete technical or design issue from THIS business only>\\\"}\"\n  }]\n}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "b12-ai-score",
+      "name": "B12. AI Score Site (Claude Haiku)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        900
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "anthropic-header-auth",
+          "name": "Anthropic Claude API Key (header: x-api-key)"
+        }
+      },
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('B11. Compute Technical Score').item.json;\nlet parsed = { design_score: null, copy_score: null, verdict: 'unknown', pitch: '' };\ntry {\n  const text = $json.content && $json.content[0] && $json.content[0].text ? $json.content[0].text : '{}';\n  const cleaned = text.replace(/```json|```/g, '').trim();\n  parsed = JSON.parse(cleaned);\n} catch (e) { /* Claude didn't return clean JSON, keep defaults */ }\n\nreturn [{\n  json: {\n    place_id: original.place_id,\n    name: original.matched_name || original.inferred_name,\n    website: original.website,\n    rating: original.rating,\n    review_count: original.review_count,\n    phone: original.phone,\n    address: original.address,\n    lead_type: 'direct_website_check',\n    google_listing_matched: original.google_listing_matched,\n    name_source: original.name_source,\n    technical_score: original.technical_score,\n    pagespeed_score: original.pagespeed_score,\n    lcp: original.lcp,\n    cls: original.cls,\n    ai_crawlers_blocked: original.ai_crawlers_blocked,\n    crawler_access_ok: original.crawler_access_ok,\n    has_schema_markup: original.has_schema_markup,\n    has_llms_txt: original.has_llms_txt,\n    design_score: parsed.design_score,\n    copy_score: parsed.copy_score,\n    verdict: parsed.verdict,\n    pitch: parsed.pitch\n  }\n}];"
+      },
+      "id": "b13-parse-ai-response",
+      "name": "B13. Parse AI JSON Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map(i => i.json);\nconst summary = {\n  success: true,\n  count: items.length,\n  leads: items.map(i => ({\n    name: i.name || null,\n    website: i.website || null,\n    lead_type: i.lead_type || null,\n    technical_score: i.technical_score ?? null,\n    verdict: i.verdict || null,\n    review_count: i.review_count ?? null,\n    pitch: i.pitch || null\n  }))\n};\nreturn [{ json: summary }];"
+      },
+      "id": "18-build-response",
+      "name": "18. Build Response Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1740,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "19-respond",
+      "name": "19. Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1960,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// At this point every business in THIS search batch has already been technically scored.\n// Compute real, verifiable stats across the batch so the AI pitch can cite actual numbers\n// instead of inventing a generic \"competitors are already doing this\" claim.\nconst items = $input.all();\nconst scored = items.filter(i => i.json.website); // only businesses that had a website to score\nconst batch_size = scored.length;\nconst llms_txt_count = scored.filter(i => i.json.has_llms_txt).length;\nconst crawler_blocked_count = scored.filter(i => i.json.crawler_access_ok === false).length;\nconst avg_pagespeed = scored.length\n  ? Math.round(scored.reduce((sum, i) => sum + (i.json.pagespeed_score ?? 0), 0) / scored.length)\n  : null;\n\nreturn items.map(i => ({\n  json: {\n    ...i.json,\n    batch_size,\n    batch_llms_txt_count: llms_txt_count,\n    batch_crawler_blocked_count: crawler_blocked_count,\n    batch_avg_pagespeed: avg_pagespeed\n  }\n}));"
+      },
+      "id": "13b-batch-context",
+      "name": "13b. Compute Real Competitor Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        970,
+        180
+      ]
+    }
+  ],
+  "connections": {
+    "1. Set Search Params": {
+      "main": [
+        [
+          {
+            "node": "2. Search Places (Text Search)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Search Places (Text Search)": {
+      "main": [
+        [
+          {
+            "node": "3. Split Into Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Split Into Items": {
+      "main": [
+        [
+          {
+            "node": "4. Filter: Enough Reviews?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Filter: Enough Reviews?": {
+      "main": [
+        [
+          {
+            "node": "5. Has Website?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "5. Has Website?": {
+      "main": [
+        [
+          {
+            "node": "6b. Fetch Homepage HTML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "6a. Tag No-Website Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6a. Tag No-Website Lead": {
+      "main": [
+        [
+          {
+            "node": "16. Merge All Leads",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "6b. Fetch Homepage HTML": {
+      "main": [
+        [
+          {
+            "node": "7. Parse HTML + Detect Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7. Parse HTML + Detect Schema": {
+      "main": [
+        [
+          {
+            "node": "8. PageSpeed Insights (Mobile)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8. PageSpeed Insights (Mobile)": {
+      "main": [
+        [
+          {
+            "node": "9. Recombine: PageSpeed Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9. Recombine: PageSpeed Result": {
+      "main": [
+        [
+          {
+            "node": "10. Fetch robots.txt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "10. Fetch robots.txt": {
+      "main": [
+        [
+          {
+            "node": "11. Recombine: robots.txt Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "11. Recombine: robots.txt Result": {
+      "main": [
+        [
+          {
+            "node": "12. Fetch llms.txt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "12. Fetch llms.txt": {
+      "main": [
+        [
+          {
+            "node": "13. Compute Technical Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13. Compute Technical Score": {
+      "main": [
+        [
+          {
+            "node": "13b. Compute Real Competitor Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "14. AI Score Site (Claude Haiku)": {
+      "main": [
+        [
+          {
+            "node": "15. Parse AI JSON Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15. Parse AI JSON Response": {
+      "main": [
+        [
+          {
+            "node": "16. Merge All Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "16. Merge All Leads": {
+      "main": [
+        [
+          {
+            "node": "17. Append to Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B1. Normalize URL": {
+      "main": [
+        [
+          {
+            "node": "B2. Fetch Homepage HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B2. Fetch Homepage HTML": {
+      "main": [
+        [
+          {
+            "node": "B3. Parse HTML + Infer Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B3. Parse HTML + Infer Name": {
+      "main": [
+        [
+          {
+            "node": "B4. Find Matching Google Listing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B4. Find Matching Google Listing": {
+      "main": [
+        [
+          {
+            "node": "B5. Extract Place Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B5. Extract Place Match": {
+      "main": [
+        [
+          {
+            "node": "B6. PageSpeed Insights (Mobile)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B6. PageSpeed Insights (Mobile)": {
+      "main": [
+        [
+          {
+            "node": "B7. Recombine: PageSpeed Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B7. Recombine: PageSpeed Result": {
+      "main": [
+        [
+          {
+            "node": "B8. Fetch robots.txt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B8. Fetch robots.txt": {
+      "main": [
+        [
+          {
+            "node": "B9. Recombine: robots.txt Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B9. Recombine: robots.txt Result": {
+      "main": [
+        [
+          {
+            "node": "B10. Fetch llms.txt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B10. Fetch llms.txt": {
+      "main": [
+        [
+          {
+            "node": "B11. Compute Technical Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B11. Compute Technical Score": {
+      "main": [
+        [
+          {
+            "node": "B12. AI Score Site (Claude Haiku)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B12. AI Score Site (Claude Haiku)": {
+      "main": [
+        [
+          {
+            "node": "B13. Parse AI JSON Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B13. Parse AI JSON Response": {
+      "main": [
+        [
+          {
+            "node": "17. Append to Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B0. Website Input": {
+      "main": [
+        [
+          {
+            "node": "B1. Normalize URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: New Lead Search": {
+      "main": [
+        [
+          {
+            "node": "1. Set Search Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Grade Website": {
+      "main": [
+        [
+          {
+            "node": "B0. Website Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "17. Append to Google Sheet": {
+      "main": [
+        [
+          {
+            "node": "18. Build Response Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "18. Build Response Summary": {
+      "main": [
+        [
+          {
+            "node": "19. Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13b. Compute Real Competitor Stats": {
+      "main": [
+        [
+          {
+            "node": "14. AI Score Site (Claude Haiku)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "local-build"
+  }
+}
